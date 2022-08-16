@@ -1,0 +1,72 @@
+version: 0.2
+env:
+    secrets-manager:
+        DEVENV: 'dev/api-service'
+        PRODENV: 'prod/api-service'
+        SRVACC: 'firebaseServiceAccount'
+phases:
+    install:
+        commands:
+            - |
+                if ! expr "${CODEBUILD_WEBHOOK_TRIGGER}" : "pr/.*" >/dev/null; then
+                    echo install kubectl
+                    curl -o kubectl https://s3.us-west-2.amazonaws.com/amazon-eks/1.22.6/2022-03-09/bin/darwin/amd64/kubectl
+                    chmod +x ./kubectl
+                    mkdir -p $HOME/bin && cp ./kubectl $HOME/bin/kubectl && export PATH=$PATH:$HOME/bin
+                    echo 'export PATH=$PATH:$HOME/bin' >> ~/.bashrc
+                    . ~/.bashrc
+                fi
+    pre_build:
+        commands:
+            - echo Logging into ECR
+            - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin 080752234109.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+            - |
+                if ! expr "${CODEBUILD_WEBHOOK_TRIGGER}" : "pr/.*" >/dev/null; then
+                  echo Logging into EKS
+                  aws eks --region $AWS_DEFAULT_REGION update-kubeconfig --name $AWS_CLUSTER_NAME
+                fi
+            - |
+                if expr "${CODEBUILD_WEBHOOK_TRIGGER}" : "pr/.*" >/dev/null || expr "${CODEBUILD_WEBHOOK_TRIGGER}" : "branch/main" >/dev/null; then
+                    echo Get env secrets from secret manager
+                    echo $DEVENV | tr ' ' '\n' > .env
+                fi
+            - |
+                if expr "${CODEBUILD_WEBHOOK_TRIGGER}" : "tag/.*" >/dev/null; then
+                    echo Get env secrets from secret manager
+                    echo $PRODENV | tr ' ' '\n' > .env
+                fi
+            - echo $SRVACC > lineleap.json
+            - echo Install packages
+            - npm i --force
+    build:
+        commands:
+            - echo Run NPM build
+            - npm run build
+            - echo Building the Docker image...
+            - |
+                if expr "${CODEBUILD_WEBHOOK_TRIGGER}" : "pr/.*" >/dev/null; then
+                    export TAG=PR-$(echo "${CODEBUILD_RESOLVED_SOURCE_VERSION}" | head -c 6)
+                fi
+            - |
+                if expr "${CODEBUILD_WEBHOOK_TRIGGER}" : "branch/main" >/dev/null; then
+                    export TAG=$(echo "${CODEBUILD_RESOLVED_SOURCE_VERSION}" | head -c 6)
+                fi
+            - |
+                if expr "${CODEBUILD_WEBHOOK_TRIGGER}" : "tag/.*" >/dev/null; then
+                    export TAG=$(echo "${CODEBUILD_WEBHOOK_TRIGGER}" | cut -d "/" -f2)
+                fi
+            - echo $TAG
+            - docker build -t 080752234109.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$TAG .
+    post_build:
+        commands:
+            - echo Pushing the Docker image...
+            - docker push 080752234109.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$IMAGE_REPO_NAME:$TAG
+            - echo Updating EKS deployment
+            - |
+                if expr "${CODEBUILD_WEBHOOK_TRIGGER}" : "branch/main" >/dev/null; then
+                    kubectl set image deploy/api-service api-service=080752234109.dkr.ecr.us-east-1.amazonaws.com/$IMAGE_REPO_NAME:$TAG -n lineleap-stage
+                fi
+            - |
+                if expr "${CODEBUILD_WEBHOOK_TRIGGER}" : "tag/.*" >/dev/null; then
+                    kubectl set image deploy/api-service api-service=080752234109.dkr.ecr.us-east-1.amazonaws.com/$IMAGE_REPO_NAME:$TAG -n lineleap
+                fi

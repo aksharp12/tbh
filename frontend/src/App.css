@@ -1,0 +1,51 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  background-color: #fbf8f3;
+  justify-content: center;
+  align-items: center;
+}
+
+.App {
+  text-align: center;
+  background-color: #fbf8f3;
+  display: flex;
+  width: 100%;
+}
+
+.logo {
+  margin-left: 24px;
+  margin-top: 29px;
+}
+
+.form-div {
+  max-width: 600px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  margin-top: 122px;
+  text-align: center;
+}
+
+label {
+  font-size: 28px;
+  color: #1c216c;
+  margin-bottom: 15px;
+}
+
+.textarea1 {
+  height: 256px;
+}
+
+.textarea2 {
+  height: 150px;
+}
+
+.button {
+  width: 140px;
+  height: 56px;
+  background: #6aac89;
+  opacity: 0.25;
+  border-radius: 20px;
+  margin-top: 60px;
+}
