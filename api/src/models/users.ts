@@ -5,8 +5,7 @@ export interface User {
     college: string;
     age: number;
     email: string;
-}
-
-export interface UserMap {
     [key: string]: any;
 }
+
+export interface UserMap {}
